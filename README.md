@@ -9,7 +9,7 @@ QML Application for visualization and evaluation of image processing algorithms 
 
 ## Built With
 
-* [Qt](https://wiki.qt.io/About_Qt) - the C++ framework used
+* [Qt/QML](https://wiki.qt.io/About_Qt) - the C++ framework used
 * [OpenCV](https://opencv.org/) - used for majority of Image Processing done
 
 ## Authors
