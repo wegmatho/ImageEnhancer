@@ -1,6 +1,10 @@
 # ImageEnhancer
 QML Application for visualization and evaluation of image processing algorithms for image enhancement
 
+## Change Log
+19.08.2018: initial application with 3 algorithms
+20.08.2018: actual processing in separate thread
+
 ## Getting Started
 
 ### Prerequisites
