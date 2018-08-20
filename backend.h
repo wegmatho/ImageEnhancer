@@ -2,22 +2,22 @@
 #define BACKEND_H
 
 #include <opencv2/core.hpp>
+#include "imageprocessingworker.h"
 #include <QObject>
+#include <QDebug>
+#include <QThread>
 #include <QUrl>
 #include <QDir>
 
-class BackEnd : public QObject
-{
+class BackEnd : public QObject {
     Q_OBJECT
     Q_PROPERTY(QUrl originalImagePath READ originalImagePath WRITE setOriginalImagePath NOTIFY originalImagePathChanged)
     Q_PROPERTY(QUrl enhancedImagePath READ enhancedImagePath WRITE setEnhancedImagePath NOTIFY enhancedImagePathChanged)
-    Q_PROPERTY(ImageProcessingAlgorithm algorithm READ algorithm WRITE setAlgorithm NOTIFY algorithmChanged )
+    Q_PROPERTY(ImageEnhancerEnums::ImageProcessingAlgorithm algorithm READ algorithm WRITE setAlgorithm NOTIFY algorithmChanged)
+    Q_PROPERTY(bool isProcessing READ isProcessing WRITE setIsProcessing NOTIFY isProcessingChanged)
 
 public:
     explicit BackEnd(QObject *parent = nullptr);
-
-    enum ImageProcessingAlgorithm { Gaussian, ShadingCorrectionGaussian, ShadingCorrectionCavalcanti };
-    Q_ENUM(ImageProcessingAlgorithm)
 
     QUrl originalImagePath();
     void setOriginalImagePath(const QUrl &originalImagePath);
@@ -25,29 +25,32 @@ public:
     QUrl enhancedImagePath();
     void setEnhancedImagePath(const QUrl &enhancedImagePath);
 
-    ImageProcessingAlgorithm algorithm();
-    void setAlgorithm(const ImageProcessingAlgorithm &algorithm);
+    ImageEnhancerEnums::ImageProcessingAlgorithm algorithm();
+    void setAlgorithm(const ImageEnhancerEnums::ImageProcessingAlgorithm &algorithm);
 
-    Q_INVOKABLE void applyAlgorithm();
+    bool isProcessing();
+    void setIsProcessing(const bool &isProcessing);
+
+    Q_INVOKABLE void startAlgorithm();
+
+    static void declareQML() {
+        qmlRegisterType<BackEnd>("enhancer.backend", 1, 0, "BackEnd");
+    }
+
+public slots:
+    void workerFinished(const QUrl &fileName);
+    void workerError(QString err);
 
 signals:
     void originalImagePathChanged();
     void enhancedImagePathChanged();
-    void algorithmChanged(ImageProcessingAlgorithm);
+    void algorithmChanged(ImageEnhancerEnums::ImageProcessingAlgorithm);
+    void isProcessingChanged();
 
 private:
     QUrl m_originalImagePath, m_enhancedImagePath;
-    ImageProcessingAlgorithm m_algorithm;
-    cv::Mat image, enhancedImage;
-    cv::Mat getImage() const;
-    void setImage(const cv::Mat &value);
-    cv::Mat getEnhancedImage() const;
-    void setEnhancedImage(const cv::Mat &value);
-    bool loadImage(const QUrl &value);
-    QUrl saveImage(const cv::Mat &value);
-    cv::Mat applyShadingCorrectionGauss(const cv::Mat &value);
-    cv::Mat applyShadingCorrectionCavalcanti(const cv::Mat &value);
-    cv::Mat applyGaussian(const cv::Mat &value);
+    ImageEnhancerEnums::ImageProcessingAlgorithm m_algorithm;
+    bool m_isProcessing = false;
 };
 
 #endif // BACKEND_H

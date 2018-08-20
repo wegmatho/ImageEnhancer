@@ -18,7 +18,8 @@ LIBS += -L/usr/local/lib -lopencv_core -lopencv_imgcodecs -lopencv_highgui -lope
 SOURCES += \
         main.cpp \
     backend.cpp \
-    shadingcorrection.cpp
+    shadingcorrection.cpp \
+    imageprocessingworker.cpp
 
 RESOURCES += qml.qrc \
     images.qrc
@@ -36,4 +37,8 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 
 HEADERS += \
     backend.h \
-    shadingcorrection.h
+    shadingcorrection.h \
+    imageprocessingworker.h \
+    imageenhancerenums.h
+
+DISTFILES +=

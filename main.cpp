@@ -5,7 +5,8 @@
 
 int main(int argc, char *argv[])
 {
-    qmlRegisterType<BackEnd>("enhancer.backend", 1, 0, "BackEnd");
+    BackEnd::declareQML();
+    ImageEnhancerEnums::declareQML();
 
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
 

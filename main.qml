@@ -4,6 +4,7 @@ import QtQuick.Dialogs 1.2
 import QtQuick.Controls 2.4
 import QtQuick.Layouts 1.1
 import enhancer.backend 1.0
+import enhancer.enums 1.0
 
 ApplicationWindow {
     id: window
@@ -14,19 +15,19 @@ ApplicationWindow {
 
     BackEnd {
         id: backend
-        algorithm: BackEnd.ShadingCorrectionGaussian
-        property Image originalImageElement: Qt.createQmlObject('import QtQuick 2.11; Image{
+        algorithm: ImageEnhancerEnums.ShadingCorrectionGaussian
+        property Image originalImageElement:
+            Qt.createQmlObject('import QtQuick 2.11; Image{
                     id: originalImage
                     source: "/images/missing.png"
                     anchors.fill: parent
-                    fillMode: Image.PreserveAspectFit
                     verticalAlignment: Image.AlignTop
                     horizontalAlignment: Image.AlignLeft
                     visible: true
+                    property bool isInitialImage: true
                 }',content,"dynamicSnippet_CreateOriginalImage_Dummy");
         property Image enhancedImageElement
         onOriginalImagePathChanged: {
-            // destroy and recreate the Image element to force QML to get the Image source again..
             console.log("ORIGINAL image changed")
             if (originalImageElement !== null)
                 originalImageElement.destroy()
@@ -38,10 +39,12 @@ ApplicationWindow {
                     fillMode: Image.PreserveAspectFit
                     verticalAlignment: Image.AlignTop
                     horizontalAlignment: Image.AlignLeft
-                    visible: false
+                    visible: true
                     cache: false
+                    property bool isInitialImage: false
                 }',content,"dynamicSnippet_CreateOriginalImage");
             console.log("Object originalImageElement created")
+            console.log("ALGORITHM started")
         }
         onEnhancedImagePathChanged: {
             console.log("ENHANCED image changed")
@@ -62,43 +65,51 @@ ApplicationWindow {
         }
     }
 
-    Item{
-        id: content
-        anchors.fill: parent
-    }
-
     menuBar: MenuBar {
         Menu {
             id: fileMenu
             title: "File"
             MenuItem {
-                text: "Choose Image .."
+                text: "Open..."
                 onTriggered: fileDialog.open()
+                Shortcut {
+                    sequence: StandardKey.Open
+                    onActivated: fileDialog.open()
+                }
             }
+            MenuItem {
+                text: "Options..."
+                onTriggered: optionsDialog.open()
+            }
+            MenuSeparator{}
             MenuItem {
                 text: "Exit"
                 onTriggered: Qt.quit()
-            }
-            onClosed: {
-                // reset the position (attributes get permanently changed by popup via MouseArea)
-                fileMenu.x = 0
-                fileMenu.y = 40
-            }
-        }
-        Menu {
-            id: viewMenu
-            title: "View"
-            MenuItem {
-                text: "Options"
-                onTriggered: optionsDialog.open()
+                Shortcut {
+                    sequence: StandardKey.Quit
+                    onActivated: Qt.quit()
+                }
             }
         }
         Menu {
             title: "About"
             MenuItem {
-                text: "Info .."
+                text: "Info..."
                 onTriggered: aboutDialog.open()
             }
+        }
+    }
+
+    Item{
+        id: content
+        anchors.fill: parent
+    }
+
+    footer: GroupBox {
+        Layout.fillWidth: true
+        BusyIndicator {
+            id: busyIndicator
+            running: backend.isProcessing
         }
     }
 
@@ -107,7 +118,8 @@ ApplicationWindow {
         icon: StandardIcon.Information
         title: "About .."
         text: "Image Enhancer"
-        informativeText: "Tool for evaluating image enhancement algorithms. Click the image to show original. See View-Options to switch Algorithm. Created in August 2018 by Thomas Wegmann"
+        informativeText: "Tool for evaluating image enhancement algorithms. Click the image to show original. See Options to change and configure algorithm."
+        detailedText: "Created in August 2018 by Thomas Wegmann"
     }
 
     FileDialog {
@@ -117,23 +129,21 @@ ApplicationWindow {
         nameFilters: [ "Image files (*.jpg *.png)", "All files (*)" ]
         selectMultiple: false
         onAccepted: {
-            backend.originalImagePath = fileDialog.fileUrl
             console.log("User chose file: "+fileDialog.fileUrl)
+            backend.originalImagePath = fileDialog.fileUrl
         }
     }
 
     Dialog{
         id: optionsDialog
-
         GroupBox {
             title: "Algorithm to apply"
-
             RowLayout {
                 RadioButton {
                     text: "Gaussian"
                     onCheckedChanged: {
                         if(checked)
-                            backend.algorithm = BackEnd.Gaussian
+                            backend.algorithm = ImageEnhancerEnums.Gaussian
                     }
                 }
                 RadioButton {
@@ -141,14 +151,14 @@ ApplicationWindow {
                     checked: true
                     onCheckedChanged: {
                         if(checked)
-                            backend.algorithm = BackEnd.ShadingCorrectionGaussian
+                            backend.algorithm = ImageEnhancerEnums.ShadingCorrectionGaussian
                     }
                 }
                 RadioButton {
                     text: "Shading Correction (Cavalcanti) preview!"
                     onCheckedChanged: {
                         if(checked)
-                            backend.algorithm = BackEnd.ShadingCorrectionCavalcanti
+                            backend.algorithm = ImageEnhancerEnums.ShadingCorrectionCavalcanti
                     }
                 }
             }
@@ -159,13 +169,18 @@ ApplicationWindow {
         id: leftClickMouseArea
         anchors.fill: content
         acceptedButtons: Qt.LeftButton
-        onPressed: {
-            if (backend.originalImageElement !== null && backend.enhancedImageElement !== null){
-                backend.originalImageElement.visible = true
-                backend.enhancedImageElement.visible = false
+        onPressed: { // display original image or open file dialog if no image was loaded yet
+            if (backend.originalImageElement !== null){
+                if (backend.enhancedImageElement !== null){
+                    backend.originalImageElement.visible = true
+                    backend.enhancedImageElement.visible = false
+                } else {
+                    if (backend.originalImageElement.isInitialImage)
+                        fileDialog.open()
+                }
             }
         }
-        onReleased: {
+        onReleased: { // display enhanced image
             if (backend.originalImageElement !== null)
                 backend.originalImageElement.visible = true
             if (backend.originalImageElement !== null && backend.enhancedImageElement !== null){
@@ -179,10 +194,10 @@ ApplicationWindow {
         id: rightClickMouseArea
         anchors.fill: content
         acceptedButtons: Qt.RightButton
-        onClicked: fileMenu.popup()
-        onPressAndHold: {
+        onClicked: optionsDialog.open()
+        onPressAndHold: { // so the dialog doesnt open when drag-drop motion was made
             if (mouse.source === Qt.MouseEventNotSynthesized)
-                fileMenu.popup()
+                optionsDialog.open()
         }
     }
 

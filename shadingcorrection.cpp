@@ -80,6 +80,10 @@ private:
  * @return
  */
 Mat ShadingCorrection::correctShadingCavalcanti(Mat rgbImage, int k_prc, InputOutputArray P_opt, int max_gray_for_model){
+
+    // http://apps.jcns.fz-juelich.de/doku/sc/lmfit!!!!!!
+
+
     // convert to HSV color space
     Mat hsvImage;
     cvtColor(rgbImage,hsvImage,COLOR_BGR2HSV);

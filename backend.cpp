@@ -1,9 +1,6 @@
 #include "backend.h"
-#include "shadingcorrection.h"
-#include <opencv2/imgproc.hpp>
-#include <opencv2/imgcodecs.hpp>
-#include <opencv2/highgui.hpp>
-using namespace cv;
+#include <iostream>
+using namespace std;
 
 BackEnd::BackEnd(QObject *parent) : QObject(parent)
 {
@@ -21,7 +18,7 @@ void BackEnd::setOriginalImagePath(const QUrl &originalImagePath)
 
     m_originalImagePath = originalImagePath;
     emit originalImagePathChanged();
-    applyAlgorithm();
+    startAlgorithm();
 }
 
 QUrl BackEnd::enhancedImagePath()
@@ -31,102 +28,70 @@ QUrl BackEnd::enhancedImagePath()
 
 void BackEnd::setEnhancedImagePath(const QUrl &enhancedImagePath)
 {
-    if (enhancedImagePath == m_enhancedImagePath)
+    if (enhancedImagePath == m_enhancedImagePath){
+        // always trigger the event so QML reloads the image
+        emit enhancedImagePathChanged();
         return;
+    }
 
     m_enhancedImagePath = enhancedImagePath;
+    emit enhancedImagePathChanged();
 }
 
-BackEnd::ImageProcessingAlgorithm BackEnd::algorithm(){
+ImageEnhancerEnums::ImageProcessingAlgorithm BackEnd::algorithm(){
     return m_algorithm;
 }
-void BackEnd::setAlgorithm(const ImageProcessingAlgorithm &algorithm){
+void BackEnd::setAlgorithm(const ImageEnhancerEnums::ImageProcessingAlgorithm &algorithm){
     if (algorithm == m_algorithm)
         return;
 
     m_algorithm = algorithm;
     emit algorithmChanged(m_algorithm);
-    applyAlgorithm();
+    startAlgorithm();
 }
 
-void BackEnd::applyAlgorithm(){
-    bool loadedSuccess = loadImage(m_originalImagePath);
-    if(loadedSuccess){
-        Mat adjustedImage;
-        switch(BackEnd::algorithm()){
-        case ImageProcessingAlgorithm::ShadingCorrectionCavalcanti: adjustedImage = applyShadingCorrectionCavalcanti(BackEnd::getImage());break;
-        case ImageProcessingAlgorithm::ShadingCorrectionGaussian: adjustedImage = applyShadingCorrectionGauss(BackEnd::getImage());break;
-        case ImageProcessingAlgorithm::Gaussian: adjustedImage = applyGaussian(BackEnd::getImage()); break;
-        }
+bool BackEnd::isProcessing()
+{
+    return m_isProcessing;
+}
 
-        QUrl filename = saveImage(adjustedImage);
-        BackEnd::setEnhancedImagePath(filename);
-        emit enhancedImagePathChanged();
+void BackEnd::setIsProcessing(const bool &isProcessing)
+{
+    if (isProcessing == m_isProcessing)
+        return;
+
+    m_isProcessing = isProcessing;
+    emit isProcessingChanged();
+}
+
+void BackEnd::startAlgorithm(){
+    if(isProcessing()){
+        qDebug() << "BACKEND: busy (tried to start new worker thread)";
+    } else{
+        setIsProcessing(true);
+        qDebug() << "BACKEND: starting worker thread";
+        QThread* thread = new QThread;
+        ImageProcessingWorker* worker = new ImageProcessingWorker(originalImagePath(), algorithm());
+        worker->moveToThread(thread);
+        connect(worker, SIGNAL (error(QString)), this, SLOT (workerError(QString)));
+        connect(thread, SIGNAL (started()), worker, SLOT (process()));
+        connect(worker, SIGNAL (fileSaved(QUrl)), this, SLOT (workerFinished(QUrl)));
+        connect(worker, SIGNAL (finished()), thread, SLOT (quit()));
+        connect(worker, SIGNAL (finished()), worker, SLOT (deleteLater()));
+        connect(thread, SIGNAL (finished()), thread, SLOT (deleteLater()));
+        thread->start();
+        qDebug() << "BACKEND: worker thread started";
     }
 }
 
-bool BackEnd::loadImage(const QUrl &value){
-    String path = value.path().toStdString();
-    if (path.length() > 0){
-        image = imread(path, IMREAD_COLOR);
-        BackEnd::setImage(image);
-        return true;
-    }else{
-        return false;
-    }
+void BackEnd::workerFinished(const QUrl &fileName) {
+    qDebug() << "BACKEND: got worker finished event with file: " << fileName;
+    BackEnd::setEnhancedImagePath(fileName);
+    setIsProcessing(false);
 }
 
-Mat BackEnd::getImage() const
+void BackEnd::workerError(QString err)
 {
-    return image;
-}
-
-void BackEnd::setImage(const Mat &value)
-{
-    image = value;
-}
-
-Mat BackEnd::getEnhancedImage() const
-{
-    return enhancedImage;
-}
-
-void BackEnd::setEnhancedImage(const Mat &value)
-{
-    enhancedImage = value;
-}
-
-QUrl BackEnd::saveImage(const Mat &value)
-{
-    std::vector<int> compression_params;
-    compression_params.push_back(CV_IMWRITE_JPEG_QUALITY);
-    compression_params.push_back(100);
-    QString workingDir = QDir::currentPath();
-    String fileName = workingDir.toStdString()+"/enhanced.jpg";
-    imwrite(fileName,value,compression_params);
-    return QUrl(QString::fromStdString("file://"+fileName));
-}
-
-Mat BackEnd::applyShadingCorrectionCavalcanti(const Mat &value){
-    Mat adjustedImage;
-    Mat P_init = Mat::ones(6, 1, CV_64FC1);
-    int k_prc = 25;
-    int max_gray_for_model = 150;
-    adjustedImage = ShadingCorrection::correctShadingCavalcanti(value, k_prc, P_init, max_gray_for_model);
-    return adjustedImage;
-}
-
-Mat BackEnd::applyShadingCorrectionGauss(const Mat &value){
-    Mat adjustedImage;
-    double sigma = 10;
-    adjustedImage = ShadingCorrection::correctShadingGaussian(value, sigma);
-    return adjustedImage;
-}
-
-Mat BackEnd::applyGaussian(const Mat &value){
-    Mat adjustedImage;
-    int ksize = 51;
-    double sigma = 5;
-    GaussianBlur(value,adjustedImage,Size(ksize,ksize),sigma,sigma);
-    return adjustedImage;
+    qDebug() << "BACKEND: Error received from worker: " << err;
+    setIsProcessing(false);
 }
